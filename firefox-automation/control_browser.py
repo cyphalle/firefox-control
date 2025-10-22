@@ -6,32 +6,46 @@ import time
 import random
 import argparse
 
-def get_firefox_pid():
-    result = subprocess.run(['pgrep', '-x', 'firefox'], capture_output=True, text=True)
+def get_browser_pid(browser_name):
+    # Map browser names to their process names
+    browser_processes = {
+        'firefox': 'firefox',
+        'safari': 'Safari',
+        'chrome': 'Google Chrome'
+    }
+    process_name = browser_processes.get(browser_name.lower(), browser_name)
+    result = subprocess.run(['pgrep', '-xi', process_name], capture_output=True, text=True)
     pids = result.stdout.strip().split('\n')
     return int(pids[0]) if pids[0] else None
 
-def is_firefox_focused():
-    """Vérifie si Firefox est l'application au premier plan"""
+def is_browser_focused(browser_name):
+    """Vérifie si le navigateur spécifié est l'application au premier plan"""
     try:
         workspace = NSWorkspace.sharedWorkspace()
         active_app = workspace.frontmostApplication()
         app_name = active_app.localizedName()
         # Debug: décommentez la ligne suivante pour voir quelle app est détectée
         # print(f"[DEBUG] App active: {app_name}")
-        return app_name and 'firefox' in app_name.lower()
+        # Map browser names to their app names
+        browser_app_names = {
+            'firefox': 'firefox',
+            'safari': 'safari',
+            'chrome': 'chrome'
+        }
+        target_browser = browser_app_names.get(browser_name.lower(), browser_name.lower())
+        return app_name and target_browser in app_name.lower()
     except:
         return False
 
-def wait_if_firefox_focused(pause_delay):
-    """Attend tant que Firefox a le focus, puis attend encore pause_delay secondes"""
-    if not is_firefox_focused():
+def wait_if_browser_focused(browser_name, pause_delay):
+    """Attend tant que le navigateur a le focus, puis attend encore pause_delay secondes"""
+    if not is_browser_focused(browser_name):
         return False
 
-    print("⏸️  PAUSE - Firefox a le focus (interaction utilisateur détectée)")
+    print(f"⏸️  PAUSE - {browser_name.capitalize()} a le focus (interaction utilisateur détectée)")
 
-    # Attendre que Firefox perde le focus
-    while is_firefox_focused():
+    # Attendre que le navigateur perde le focus
+    while is_browser_focused(browser_name):
         time.sleep(CHECK_FOCUS_INTERVAL)
 
     print(f"⏳ Attente de {pause_delay}s après perte de focus...")
@@ -39,13 +53,13 @@ def wait_if_firefox_focused(pause_delay):
     print("▶️  REPRISE de la séquence")
     return True
 
-def smart_sleep(duration):
-    """Sleep intelligent qui vérifie le focus de Firefox et met en pause si nécessaire"""
+def smart_sleep(browser_name, duration):
+    """Sleep intelligent qui vérifie le focus du navigateur et met en pause si nécessaire"""
     start_time = time.time()
     while time.time() - start_time < duration:
-        # Vérifier si Firefox a le focus
-        if is_firefox_focused():
-            wait_if_firefox_focused(PAUSE_DELAY_AFTER_FOCUS_LOST)
+        # Vérifier si le navigateur a le focus
+        if is_browser_focused(browser_name):
+            wait_if_browser_focused(browser_name, PAUSE_DELAY_AFTER_FOCUS_LOST)
             # Réinitialiser le timer après la pause
             start_time = time.time()
 
@@ -85,70 +99,73 @@ PAUSE_DELAY_AFTER_FOCUS_LOST = 10  # Secondes à attendre après perte de focus 
 CHECK_FOCUS_INTERVAL = 0.5  # Fréquence de vérification du focus (secondes)
 
 # Arguments
-parser = argparse.ArgumentParser(description='Contrôle automatique de Firefox avec séquences de navigation')
+parser = argparse.ArgumentParser(description='Contrôle automatique de navigateur avec séquences de navigation')
+parser.add_argument('-b', '--browser', type=str, default='firefox',
+                    choices=['firefox', 'safari', 'chrome'],
+                    help='Navigateur à contrôler (défaut: firefox)')
 parser.add_argument('-n', '--sequences', type=int, default=None,
                     help='Nombre de séquences à exécuter (défaut: infini)')
 args = parser.parse_args()
 
 # Exécution
-pid = get_firefox_pid()
+pid = get_browser_pid(args.browser)
 if not pid:
-    print("Firefox non trouvé")
+    print(f"{args.browser.capitalize()} non trouvé")
     exit(1)
 
-print(f"Firefox trouvé (PID: {pid})")
+print(f"{args.browser.capitalize()} trouvé (PID: {pid})")
 if args.sequences:
     print(f"Démarrage de {args.sequences} séquence(s). Appuyez sur Ctrl+C pour arrêter.")
 else:
     print("Séquence démarrée en mode infini. Appuyez sur Ctrl+C pour arrêter.")
-print(f"La séquence se mettra en pause automatiquement si vous interagissez avec Firefox")
+print(f"La séquence se mettra en pause automatiquement si vous interagissez avec {args.browser.capitalize()}")
 print(f"et reprendra {PAUSE_DELAY_AFTER_FOCUS_LOST}s après la fin de l'interaction.\n")
 
 try:
     sequence_count = 0
     while args.sequences is None or sequence_count < args.sequences:
         # Vérifier avant de commencer
-        wait_if_firefox_focused(PAUSE_DELAY_AFTER_FOCUS_LOST)
+        wait_if_browser_focused(args.browser, PAUSE_DELAY_AFTER_FOCUS_LOST)
 
         # Attendre random 1-5 secondes
         delay1 = random.uniform(1, 5)
         print(f"Attente {delay1:.1f}s...")
-        smart_sleep(delay1)
+        smart_sleep(args.browser, delay1)
 
         # Page Down
-        wait_if_firefox_focused(PAUSE_DELAY_AFTER_FOCUS_LOST)
+        wait_if_browser_focused(args.browser, PAUSE_DELAY_AFTER_FOCUS_LOST)
         send_key(pid, PAGE_DOWN)
         print("📄 PAGE_DOWN")
 
         # Attendre random 1-3 secondes
         delay2 = random.uniform(1, 3)
         print(f"  Attente {delay2:.1f}s...")
-        smart_sleep(delay2)
+        smart_sleep(args.browser, delay2)
 
         # Page Down 2 fois
         for i in range(2):
-            wait_if_firefox_focused(PAUSE_DELAY_AFTER_FOCUS_LOST)
+            wait_if_browser_focused(args.browser, PAUSE_DELAY_AFTER_FOCUS_LOST)
             send_key(pid, PAGE_DOWN)
             print("  📄 PAGE_DOWN")
 
         # Attendre random 1-5 secondes
         delay3 = random.uniform(1, 5)
         print(f"  Attente {delay3:.1f}s...")
-        smart_sleep(delay3)
+        smart_sleep(args.browser, delay3)
 
         # Page Down 2 fois
         for i in range(2):
-            wait_if_firefox_focused(PAUSE_DELAY_AFTER_FOCUS_LOST)
+            wait_if_browser_focused(args.browser, PAUSE_DELAY_AFTER_FOCUS_LOST)
             send_key(pid, PAGE_DOWN)
             print("  📄 PAGE_DOWN")
 
         # Attendre random 1-5 secondes
         delay4 = random.uniform(1, 5)
         print(f"  Attente {delay4:.1f}s...")
-        smart_sleep(delay4)
+        smart_sleep(args.browser, delay4)
 
         # Flèche droite
-        wait_if_firefox_focused(PAUSE_DELAY_AFTER_FOCUS_LOST)
+        wait_if_browser_focused(args.browser, PAUSE_DELAY_AFTER_FOCUS_LOST)
         send_key(pid, RIGHT)
         print("→ RIGHT")
 
